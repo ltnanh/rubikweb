@@ -1,0 +1,710 @@
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ========== CẤU HÌNH ==========
+const API_URL = '/api/solve';
+
+// Biến trạng thái
+let isCubeScrambled = false;
+let currentSolveMode = 'facelet'; // 'scramble' or 'facelet'
+
+// Màu sắc các mặt (theo chuẩn: U=Trắng, R=Đỏ, F=Xanh lá, D=Vàng, L=Cam, B=Xanh dương)
+const COLORS = {
+    'U': 0xffffff,  // Trắng
+    'R': 0xff3333,  // Đỏ
+    'F': 0x00cc00,  // Xanh lá
+    'D': 0xffcc00,  // Vàng
+    'L': 0xff6600,  // Cam
+    'B': 0x0066ff   // Xanh dương
+};
+
+// Tên các mặt
+const FACE_NAMES = ['U', 'R', 'F', 'D', 'L', 'B'];
+
+// ========== KHỞI TẠO 3D SCENE ==========
+const canvas = document.getElementById('cube-canvas');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a2a);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+camera.position.set(3, 2, 5);
+camera.lookAt(0, 0, 0);
+
+const renderer = new THREE.WebGLRenderer({ canvas, alpha: false });
+renderer.setSize(500, 500);
+renderer.setPixelRatio(window.devicePixelRatio);
+
+// Controls để xoay cube bằng chuột
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.autoRotate = false;
+controls.enableZoom = true;
+controls.zoomSpeed = 1.0;
+controls.rotateSpeed = 1.5;
+
+// Ánh sáng
+const ambientLight = new THREE.AmbientLight(0x404040);
+scene.add(ambientLight);
+const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+dirLight.position.set(1, 2, 1);
+scene.add(dirLight);
+const backLight = new THREE.DirectionalLight(0xffffff, 0.5);
+backLight.position.set(-1, -1, -1);
+scene.add(backLight);
+
+// ========== TẠO CÁC MẢNH CUBE (27 khối nhỏ) ==========
+const cubes = [];
+const cubeSize = 0.96;
+const gap = 0.04;
+const offset = 1;
+
+// Tạo 27 khối nhỏ (3x3x3)
+for (let x = -1; x <= 1; x++) {
+    for (let y = -1; y <= 1; y++) {
+        for (let z = -1; z <= 1; z++) {
+            // Bỏ qua khối lõi trung tâm (0,0,0) vì nó không được nhìn thấy
+            if (Math.abs(x) + Math.abs(y) + Math.abs(z) > 0) {
+                const geometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
+                const materials = [];
+                
+                // CÔNG THỨC MAPPING INDEX KOCIEMBA (0..53) LÊN TỪNG MATERIAL
+                // Dựa trên hệ tọa độ x(-1..1), y(-1..1), z(-1..1) của Three.js
+                
+                // Mặt phải (x=1) - Màu Đỏ (R)
+                let idxR = 9 + (1 - y) * 3 + (1 - z);
+                if (x === 1) materials.push(new THREE.MeshStandardMaterial({ color: COLORS['R'], roughness: 0.3, metalness: 0.1, name: `facelet_${idxR}` }));
+                else materials.push(new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 }));
+                
+                // Mặt trái (x=-1) - Màu Cam (L)
+                let idxL = 36 + (1 - y) * 3 + (z + 1);
+                if (x === -1) materials.push(new THREE.MeshStandardMaterial({ color: COLORS['L'], roughness: 0.3, metalness: 0.1, name: `facelet_${idxL}` }));
+                else materials.push(new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 }));
+                
+                // Mặt trên (y=1) - Màu Trắng (U)
+                let idxU = (z + 1) * 3 + (x + 1);
+                if (y === 1) materials.push(new THREE.MeshStandardMaterial({ color: COLORS['U'], roughness: 0.3, metalness: 0.1, name: `facelet_${idxU}` }));
+                else materials.push(new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 }));
+                
+                // Mặt dưới (y=-1) - Màu Vàng (D)
+                let idxD = 27 + (1 - z) * 3 + (x + 1);
+                if (y === -1) materials.push(new THREE.MeshStandardMaterial({ color: COLORS['D'], roughness: 0.3, metalness: 0.1, name: `facelet_${idxD}` }));
+                else materials.push(new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 }));
+                
+                // Mặt trước (z=1) - Màu Xanh lá (F)
+                let idxF = 18 + (1 - y) * 3 + (x + 1);
+                if (z === 1) materials.push(new THREE.MeshStandardMaterial({ color: COLORS['F'], roughness: 0.3, metalness: 0.1, name: `facelet_${idxF}` }));
+                else materials.push(new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 }));
+                
+                // Mặt sau (z=-1) - Màu Xanh dương (B)
+                let idxB = 45 + (1 - y) * 3 + (1 - x);
+                if (z === -1) materials.push(new THREE.MeshStandardMaterial({ color: COLORS['B'], roughness: 0.3, metalness: 0.1, name: `facelet_${idxB}` }));
+                else materials.push(new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.5 }));
+                
+                const mesh = new THREE.Mesh(geometry, materials);
+                mesh.position.set(x * (cubeSize + gap), y * (cubeSize + gap), z * (cubeSize + gap));
+                scene.add(mesh);
+                
+                cubes.push({ 
+                    mesh, 
+                    currentPos: { x, y, z }, // Theo dõi vị trí tọa độ logic hiện tại
+                    solvedPos: mesh.position.clone(), // Lưu cứng vị trí lúc ĐÃ GIẢI
+                    solvedRot: mesh.rotation.clone()  // Lưu cứng góc xoay lúc ĐÃ GIẢI
+                });
+            }
+        }
+    }
+}
+
+// ========== HÀM XOAY RUBIK (đơn giản hóa - xoay nhóm khối) ==========
+function rotateLayer(layer, axis, angle) {
+    // Tạo một trục xoay (pivot) ở tâm (0,0,0)
+    const pivot = new THREE.Group();
+    scene.add(pivot);
+
+    const activeCubes = [];
+    const angleRad = angle * Math.PI / 2;
+    
+    // Gắn các khối thuộc layer cần xoay vào trục pivot
+    cubes.forEach(cube => {
+        let inLayer = false;
+        if (axis === 'x' && cube.currentPos.x === layer) inLayer = true;
+        if (axis === 'y' && cube.currentPos.y === layer) inLayer = true;
+        if (axis === 'z' && cube.currentPos.z === layer) inLayer = true;
+        
+        if (inLayer) {
+            activeCubes.push(cube);
+            // Dùng attach để giữ nguyên vị trí/góc xoay tuyệt đối khi đổi cha
+            pivot.attach(cube.mesh);
+        }
+    });
+    
+    return new Promise((resolve) => {
+        const duration = 150;
+        const startTime = performance.now();
+        
+        function animate(currentTime) {
+            const elapsed = currentTime - startTime;
+            const t = Math.min(1, elapsed / duration);
+            const currentAngle = angleRad * t;
+            
+            // Xoay trục pivot -> tất cả khối con sẽ xoay theo
+            pivot.rotation[axis] = currentAngle;
+            
+            if (t < 1) {
+                requestAnimationFrame(animate);
+            } else {
+                // Chốt góc xoay chính xác khi kết thúc
+                pivot.rotation[axis] = angleRad;
+                pivot.updateMatrixWorld();
+                
+                activeCubes.forEach(cube => {
+                    // Trả khối rubik về lại Scene gốc
+                    scene.attach(cube.mesh);
+                    
+                    // Cập nhật lại toạ độ logic (currentPos)
+                    // Vì khoảng cách mỗi khối là 1 (0.96 + 0.04), chỉ cần làm tròn là ra -1, 0 hoặc 1
+                    cube.currentPos = {
+                        x: Math.round(cube.mesh.position.x),
+                        y: Math.round(cube.mesh.position.y),
+                        z: Math.round(cube.mesh.position.z)
+                    };
+
+                    // Snap (làm tròn) vị trí để tránh sai số sau nhiều lần xoay
+                    cube.mesh.position.set(
+                        cube.currentPos.x,
+                        cube.currentPos.y,
+                        cube.currentPos.z
+                    );
+                    
+                    // TUYỆT ĐỐI KHÔNG RESET ROTATION Ở ĐÂY NỮA, để khối giữ nguyên hướng màu
+                });
+                
+                scene.remove(pivot);
+                resolve();
+            }
+        }
+        
+        requestAnimationFrame(animate);
+    });
+}
+
+
+
+// ========== ÁP DỤNG CHUỖI MOVES ==========
+async function applyMoves(moves) {
+    for (const move of moves) {
+        let layer, axis, angle;
+        const base = move[0];
+        const suffix = move[1];
+        
+        switch(base) {
+            case 'U': layer = 1; axis = 'y'; angle = suffix === "'" ? 1 : (suffix === '2' ? -2 : -1); break;
+            case 'D': layer = -1; axis = 'y'; angle = suffix === "'" ? -1 : (suffix === '2' ? 2 : 1); break;
+            case 'R': layer = 1; axis = 'x'; angle = suffix === "'" ? 1 : (suffix === '2' ? -2 : -1); break;
+            case 'L': layer = -1; axis = 'x'; angle = suffix === "'" ? -1 : (suffix === '2' ? 2 : 1); break;
+            case 'F': layer = 1; axis = 'z'; angle = suffix === "'" ? 1 : (suffix === '2' ? -2 : -1); break;
+            case 'B': layer = -1; axis = 'z'; angle = suffix === "'" ? -1 : (suffix === '2' ? 2 : 1); break;
+            default: continue;
+        }
+        
+        const times = Math.abs(angle);
+        const dir = Math.sign(angle);
+        for (let i = 0; i < times; i++) {
+            await rotateLayer(layer, axis, dir);
+        }
+    }
+}
+
+// ========== CẬP NHẬT GIAO DIỆN TEXT TRẠNG THÁI ==========
+function updateStatus(text, stateClass = '') {
+    const statusEl = document.getElementById('cube-status');
+    if (statusEl) {
+        statusEl.textContent = text;
+        statusEl.className = 'cube-status'; // Reset mọi class trước
+        if (stateClass) statusEl.classList.add(stateClass);
+    }
+}
+
+
+// ========== RESET CUBE VỀ TRẠNG THÁI BAN ĐẦU ==========
+function resetCube() {
+    cubes.forEach(cube => {
+        // Trả về đúng vị trí và góc xoay lúc khởi tạo
+        cube.mesh.position.copy(cube.solvedPos);
+        cube.mesh.rotation.copy(cube.solvedRot);
+        
+        // Reset lại vị trí logic
+        cube.currentPos = {
+            x: Math.round(cube.solvedPos.x),
+            y: Math.round(cube.solvedPos.y),
+            z: Math.round(cube.solvedPos.z)
+        };
+        
+        // Trả màu các facelet về gốc (quan trọng nếu người dùng đang tự tô màu)
+        cube.mesh.material.forEach((mat) => {
+            if (mat.name && mat.name.startsWith('facelet_')) {
+                const idx = parseInt(mat.name.split('_')[1]);
+                // Tìm lại mặt nguyên thủy để lấy màu dựa vào dải Index Kociemba
+                if (idx < 9) mat.color.setHex(COLORS['U']);
+                else if (idx < 18) mat.color.setHex(COLORS['R']);
+                else if (idx < 27) mat.color.setHex(COLORS['F']);
+                else if (idx < 36) mat.color.setHex(COLORS['D']);
+                else if (idx < 45) mat.color.setHex(COLORS['L']);
+                else if (idx < 54) mat.color.setHex(COLORS['B']);
+            }
+        });
+    });
+    
+    isCubeScrambled = false;
+    updateStatus('Ready', '');
+}
+
+function clearSolution() {
+    document.getElementById('solution-moves').innerHTML = '';
+    document.getElementById('move-count').textContent = '0';
+    document.getElementById('phase1-count').textContent = '0';
+    document.getElementById('phase2-count').textContent = '0';
+    document.getElementById('solve-time').textContent = '0';
+    window.currentSolution = null;
+}
+
+function isValidScramble(scrambleStr) {
+    if (!scrambleStr) return true;
+    const validMoves = ["U", "U'", "U2", "D", "D'", "D2", "R", "R'", "R2", "L", "L'", "L2", "F", "F'", "F2", "B", "B'", "B2"];
+    const moves = scrambleStr.toUpperCase().trim().split(/\s+/);
+    return moves.every(move => validMoves.includes(move));
+}
+
+function isValidPieces(faceletArray) {
+    const edgeIndices = [
+        [5, 10], [7, 19], [3, 37], [1, 46],
+        [32, 16], [28, 25], [30, 43], [34, 52],
+        [23, 12], [21, 41], [48, 14], [50, 39]
+    ];
+    const validEdges = new Set([
+        "UR", "RU", "UF", "FU", "UL", "LU", "UB", "BU",
+        "DR", "RD", "DF", "FD", "DL", "LD", "DB", "BD",
+        "FR", "RF", "FL", "LF", "BR", "RB", "BL", "LB"
+    ]);
+
+    for (let [i1, i2] of edgeIndices) {
+        let edgeStr = faceletArray[i1] + faceletArray[i2];
+        if (!validEdges.has(edgeStr)) return false;
+    }
+
+    const cornerIndices = [
+        [8, 9, 20],   // URF
+        [6, 18, 38],  // UFL
+        [0, 36, 47],  // ULB
+        [2, 45, 11],  // UBR
+        [29, 26, 15], // DFR
+        [27, 44, 24], // DLF
+        [33, 53, 42], // DBL
+        [35, 17, 51]  // DRB
+    ];
+    const baseCorners = ["URF", "UFL", "ULB", "UBR", "DFR", "DLF", "DBL", "DRB"];
+    const validCorners = new Set();
+    baseCorners.forEach(c => {
+        validCorners.add(c);
+        validCorners.add(c[1] + c[2] + c[0]);
+        validCorners.add(c[2] + c[0] + c[1]);
+    });
+
+    for (let [i1, i2, i3] of cornerIndices) {
+        let cornerStr = faceletArray[i1] + faceletArray[i2] + faceletArray[i3];
+        if (!validCorners.has(cornerStr)) return false;
+    }
+
+    return true;
+}
+
+// ========== GỌI API GIẢI RUBIK ==========
+async function solveRubik() {
+    const solveBtn = document.getElementById('solve-btn');
+    const resultPanel = document.getElementById('result-panel');
+    const solutionDiv = document.getElementById('solution-moves');
+    const moveCountSpan = document.getElementById('move-count');
+    const phase1Span = document.getElementById('phase1-count');
+    const phase2Span = document.getElementById('phase2-count');
+    const timeSpan = document.getElementById('solve-time');
+
+    clearSolution();
+    solveBtn.textContent = '⏳ Solving...';
+    solveBtn.disabled = true;
+    
+    // Chọn API dựa vào chế độ hiện tại
+    const isFaceletMode = (currentSolveMode === 'facelet');
+    const apiEndpoint = isFaceletMode ? '/api/solve-by-facelet' : API_URL;
+    
+    const reqBody = isFaceletMode 
+        ? { facelet_string: window.currentFaceletString } 
+        : { scramble: document.getElementById('scramble-input').value.trim() };
+
+    try {
+        const response = await fetch(apiEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(reqBody)
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Hiển thị kết quả
+            solutionDiv.innerHTML = data.solution.map((move, idx) => `<span data-idx="${idx}">${move}</span>`).join(' ');
+            moveCountSpan.textContent = data.moves_count;
+            phase1Span.textContent = data.phase1_moves;
+            phase2Span.textContent = data.phase2_moves;
+            timeSpan.textContent = data.solving_time_ms;
+            
+            resultPanel.classList.remove('hidden');
+            
+            // Lưu solution để animation
+            window.currentSolution = data.solution;
+        } else {
+            alert('Solve failed: ' + (data.detail || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Connection error: ' + error.message);
+    } finally {
+        solveBtn.textContent = '⚡ SOLVE NOW';
+        solveBtn.disabled = false;
+    }
+}
+
+// ========== ANIMATION GIẢI ==========
+async function playAnimation() {
+    if (!window.currentSolution) return;
+    
+    const resetBtn = document.getElementById('reset-cube');
+    const playBtn = document.getElementById('play-animation');
+    const performBtn = document.getElementById('perform-scramble-btn');
+    const solveBtn = document.getElementById('solve-btn');
+    const randomBtn = document.getElementById('random-btn');
+    
+    // Khóa toàn bộ các nút
+    playBtn.disabled = true;
+    resetBtn.disabled = true;
+    performBtn.disabled = true;
+    solveBtn.disabled = true;
+    randomBtn.disabled = true;
+    
+    // KIỂM TRA FLAG: Nếu khối chưa được xáo trộn trên màn hình 3D
+    if (!isCubeScrambled) {
+        const scrambleInput = document.getElementById('scramble-input').value.trim();
+        if (scrambleInput) {
+            updateStatus('🔄 Scrambling automatically...', 'status-scrambling');
+            resetCube(); 
+            await new Promise(r => setTimeout(r, 100));
+            
+            const moves = scrambleInput.split(/\s+/);
+            await applyMoves(moves);
+            
+            isCubeScrambled = true;
+            await new Promise(r => setTimeout(r, 500)); // Nghỉ 0.5s trước khi tiến hành giải
+        }
+    }
+    
+    updateStatus('⚡ Solving...', 'status-solving');
+    
+    const moveSpans = document.querySelectorAll('#solution-moves span');
+    
+    for (let i = 0; i < window.currentSolution.length; i++) {
+        moveSpans.forEach(span => span.classList.remove('current-move'));
+        if (moveSpans[i]) moveSpans[i].classList.add('current-move');
+        
+        const move = window.currentSolution[i];
+        
+        let layer, axis, angle;
+        const base = move[0];
+        const suffix = move[1];
+        
+        switch(base) {
+            case 'U': layer = 1; axis = 'y'; angle = suffix === "'" ? 1 : (suffix === '2' ? -2 : -1); break;
+            case 'D': layer = -1; axis = 'y'; angle = suffix === "'" ? -1 : (suffix === '2' ? 2 : 1); break;
+            case 'R': layer = 1; axis = 'x'; angle = suffix === "'" ? 1 : (suffix === '2' ? -2 : -1); break;
+            case 'L': layer = -1; axis = 'x'; angle = suffix === "'" ? -1 : (suffix === '2' ? 2 : 1); break;
+            case 'F': layer = 1; axis = 'z'; angle = suffix === "'" ? 1 : (suffix === '2' ? -2 : -1); break;
+            case 'B': layer = -1; axis = 'z'; angle = suffix === "'" ? -1 : (suffix === '2' ? 2 : 1); break;
+            default: continue;
+        }
+        
+        const times = Math.abs(angle);
+        const dir = Math.sign(angle);
+        for (let t = 0; t < times; t++) {
+            await rotateLayer(layer, axis, dir);
+            await new Promise(r => setTimeout(r, 50));
+        }
+    }
+    
+    moveSpans.forEach(span => span.classList.remove('current-move'));
+    
+    // Đã giải xong
+    isCubeScrambled = false;
+    updateStatus('🎉 Solved', 'status-solved');
+    
+    playBtn.disabled = false;
+    resetBtn.disabled = false;
+    performBtn.disabled = false;
+    solveBtn.disabled = false;
+    randomBtn.disabled = false;
+}
+
+// ========== SINH SCRAMBLE NGẪU NHIÊN ==========
+function randomScramble() {
+    const moves = ['U', "U'", 'U2', 'R', "R'", 'R2', 'F', "F'", 'F2', 'D', "D'", 'D2', 'L', "L'", 'L2', 'B', "B'", 'B2'];
+    const length = 20 + Math.floor(Math.random() * 10);
+    const scramble = [];
+    let lastFace = '';
+    
+    for (let i = 0; i < length; i++) {
+        let move;
+        do {
+            move = moves[Math.floor(Math.random() * moves.length)];
+        } while (move[0] === lastFace);
+        scramble.push(move);
+        lastFace = move[0];
+    }
+    
+    document.getElementById('scramble-input').value = scramble.join(' ');
+    clearSolution();
+}
+
+// ========== KHỞI TẠO SỰ KIỆN ==========
+
+// ========== TÍNH NĂNG TÔ MÀU 2D (FACELET) ==========
+let currentPaintColor = 'U'; // Mặc định là Trắng (U)
+const faceletColors = new Array(54).fill(''); 
+
+// Cấu trúc vị trí đặt 6 mặt trên Grid CSS
+const GRID_LAYOUT = { 'U': [2,1], 'L': [1,2], 'F': [2,2], 'R': [3,2], 'B': [4,2], 'D': [2,3] };
+
+function initFaceletMap() {
+    const mapContainer = document.getElementById('facelet-map');
+    if (!mapContainer) return;
+    mapContainer.innerHTML = '';
+    
+    const faces = ['U', 'R', 'F', 'D', 'L', 'B'];
+    const unpaintedColor = '#444444'; // Màu xám cho các ô chưa tô
+    
+    faces.forEach((face, fIdx) => {
+        const faceDiv = document.createElement('div');
+        faceDiv.className = 'map-face';
+        faceDiv.style.gridColumn = GRID_LAYOUT[face][0];
+        faceDiv.style.gridRow = GRID_LAYOUT[face][1];
+        
+        for (let i = 0; i < 9; i++) {
+            const cellIdx = fIdx * 9 + i;
+            const cell = document.createElement('div');
+            cell.className = 'map-cell';
+            cell.dataset.idx = cellIdx;
+
+            // Chỉ tô màu cho viên tâm, các viên khác để màu xám
+            if (i === 4) { // i=4 là viên tâm của một mặt 3x3
+                faceletColors[cellIdx] = face;
+                cell.style.backgroundColor = '#' + COLORS[face].toString(16).padStart(6, '0');
+                cell.style.cursor = 'not-allowed';
+            } else {
+                faceletColors[cellIdx] = ''; // Đánh dấu là chưa tô
+                cell.style.backgroundColor = unpaintedColor;
+                
+                // Sự kiện Click để tô màu
+                cell.addEventListener('mousedown', function(e) {
+                    if (e.buttons === 1 || e.type === 'mousedown') {
+                        faceletColors[cellIdx] = currentPaintColor;
+                        this.style.backgroundColor = '#' + COLORS[currentPaintColor].toString(16).padStart(6, '0');
+                    }
+                });
+                cell.addEventListener('mouseenter', function(e) {
+                    if (e.buttons === 1) { // Hỗ trợ kéo rê chuột tô nhanh
+                        faceletColors[cellIdx] = currentPaintColor;
+                        this.style.backgroundColor = '#' + COLORS[currentPaintColor].toString(16).padStart(6, '0');
+                    }
+                });
+            }
+            
+            faceDiv.appendChild(cell);
+        }
+        mapContainer.appendChild(faceDiv);
+    });
+}
+
+// Sự kiện chọn bảng màu
+document.querySelectorAll('.color-swatch').forEach(swatch => {
+    swatch.addEventListener('click', (e) => {
+        document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('active'));
+        e.target.classList.add('active');
+        currentPaintColor = e.target.dataset.color;
+    });
+});
+
+// Khởi tạo bản đồ ngay lúc load
+initFaceletMap();
+
+// ========== KHỞI TẠO SỰ KIỆN TABS ==========
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        // Đổi active button
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        
+        // Đổi active content
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        const targetTab = e.target.dataset.tab;
+        document.getElementById(targetTab).classList.add('active');
+        
+        // Cập nhật chế độ giải
+        currentSolveMode = (targetTab === 'color-tab') ? 'facelet' : 'scramble';
+    });
+});
+
+// Thêm sự kiện cho nút Perform Scramble
+document.getElementById('perform-scramble-btn').addEventListener('click', async () => {
+    let scrambleInput = document.getElementById('scramble-input').value.trim();
+    if (!scrambleInput) return;
+
+    if (!isValidScramble(scrambleInput)) {
+        alert("Scramble must only contain characters U, U', U2, D, D', D2, R, R', R2, L, L', L2, F, F', F2, B, B', B2 separated by spaces.");
+        return;
+    }
+    scrambleInput = scrambleInput.toUpperCase();
+    document.getElementById('scramble-input').value = scrambleInput;
+
+    clearSolution();
+
+    // Lấy các nút để disable trong lúc đang xoay, tránh lỗi người dùng bấm liên tục
+    const performBtn = document.getElementById('perform-scramble-btn');
+    const solveBtn = document.getElementById('solve-btn');
+    const randomBtn = document.getElementById('random-btn');
+
+    performBtn.disabled = true;
+    solveBtn.disabled = true;
+    randomBtn.disabled = true;
+    performBtn.textContent = '🔄 Scrambling...';
+
+    // 1. Reset cube về trạng thái gốc trước khi xáo
+    resetCube();
+    await new Promise(r => setTimeout(r, 100)); // Đợi một chút cho mượt
+
+    // 2. Convert "R U F..." string to array ["R", "U", "F"...] and apply
+    // Tách chuỗi bằng khoảng trắng (hỗ trợ nhiều khoảng trắng liền nhau)
+    const moves = scrambleInput.split(/\s+/); 
+    
+    // Gọi hàm applyMoves đã có sẵn trong code của bạn
+    await applyMoves(moves);
+
+    // Cập nhật lại cờ trạng thái sau khi xáo trộn thủ công trên 3D thành công
+    isCubeScrambled = true;
+    updateStatus('Scrambled (Waiting for solve)', 'status-scrambling');
+
+    // 3. Xoay xong thì mở lại các nút
+    performBtn.disabled = false;
+    solveBtn.disabled = false;
+    randomBtn.disabled = false;
+    performBtn.textContent = '🔄 Perform Scramble';
+});
+
+// Sự kiện nút Áp Dụng Màu Lên 3D
+document.getElementById('apply-color-btn').addEventListener('click', () => {
+    if (faceletColors.includes('')) {
+        alert("⚠️ Please paint all 54 cells on the Rubik's cube!");
+        return;
+    }
+
+    // Kiểm tra tính hợp lệ sơ bộ: Mỗi màu phải xuất hiện đúng 9 lần
+    const colorCount = {};
+    faceletColors.forEach(c => colorCount[c] = (colorCount[c] || 0) + 1);
+    for (const face of ['U', 'R', 'F', 'D', 'L', 'B']) {
+        if (colorCount[face] !== 9) {
+            alert(`⚠️ Color input error: The Rubik's cube must have exactly 9 cells for each color!\nCurrently, color [${face}] has ${colorCount[face] || 0} cells.`);
+            return;
+        }
+    }
+
+    if (!isValidPieces(faceletColors)) {
+        alert("⚠️ There are invalid corner/edge colors or incorrectly twisted/flipped pieces (incorrect clockwise order)!");
+        return;
+    }
+
+    clearSolution();
+
+    // Áp dụng trạng thái màu
+    window.currentFaceletString = faceletColors.join('');
+    resetCube(); // Đưa cấu trúc vật lý về trạng thái gốc
+    
+    // Trực tiếp thay đổi màu Material dựa vào faceletString
+    cubes.forEach(cube => {
+        cube.mesh.material.forEach((mat) => {
+            if (mat.name && mat.name.startsWith('facelet_')) {
+                const idx = parseInt(mat.name.split('_')[1]);
+                const colorKey = window.currentFaceletString[idx];
+                mat.color.setHex(COLORS[colorKey]);
+            }
+        });
+    });
+
+    isCubeScrambled = true; // Bật cờ xáo để khi bấm Giải nó không nhảy về dạng chuẩn
+    updateStatus('Custom color applied', 'status-scrambling');
+});
+
+// Sự kiện nút Xóa sạch 2D Grid
+document.getElementById('reset-map-btn').addEventListener('click', initFaceletMap);
+
+document.getElementById('solve-btn').addEventListener('click', () => {
+    if (currentSolveMode === 'scramble') {
+        let scrambleInput = document.getElementById('scramble-input').value.trim();
+        if (!scrambleInput) return;
+        if (!isValidScramble(scrambleInput)) {
+            alert("Scramble must only contain characters U, U', U2, D, D', D2, R, R', R2, L, L', L2, F, F', F2, B, B', B2 separated by spaces.");
+            return;
+        }
+        scrambleInput = scrambleInput.toUpperCase();
+        document.getElementById('scramble-input').value = scrambleInput;
+    }
+    solveRubik();
+});
+
+document.getElementById('random-btn').addEventListener('click', randomScramble);
+
+document.getElementById('play-animation')?.addEventListener('click', playAnimation);
+
+document.getElementById('reset-cube')?.addEventListener('click', resetCube);
+
+document.getElementById('copy-btn')?.addEventListener('click', () => {
+    if (window.currentSolution) {
+        navigator.clipboard.writeText(window.currentSolution.join(' '));
+        alert('Solution copied!');
+    }
+});
+
+// Animation loop
+function animate() {
+    controls.update(); // Cập nhật nếu người dùng xoay
+    renderer.render(scene, camera);
+    requestAnimationFrame(animate);
+}
+
+// Resize handler
+window.addEventListener('resize', () => {
+    const container = document.querySelector('.cube-container');
+    if (container) {
+        const size = container.clientWidth;
+        renderer.setSize(size, size);
+        camera.aspect = 1;
+        camera.updateProjectionMatrix();
+    }
+});
+
+setTimeout(() => {
+    const container = document.querySelector('.cube-container');
+    if (container) {
+        const size = container.clientWidth;
+        renderer.setSize(size, size);
+        camera.aspect = 1;
+        camera.updateProjectionMatrix();
+    }
+}, 100);
+
+animate();
+
+console.log('🎉 3D Cube ready!');

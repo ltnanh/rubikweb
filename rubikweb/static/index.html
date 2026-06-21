@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Rubik Solver - Smart 3x3 Rubik Solver</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Three.js cho 3D Cube -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.128.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>🧩 RUBIK SOLVER</h1>
+            <p>Enter a scramble or click "Random" - Kociemba algorithm solves in &lt;10s</p>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Canvas cho 3D Cube -->
+            <div class="cube-container">
+                <canvas id="cube-canvas"></canvas>
+                <!-- Label hiển thị trạng thái -->
+                <div id="cube-status" class="cube-status">Ready</div>
+            </div>
+
+            <!-- Control Panel -->
+            <div class="control-panel">
+                <!-- Nút chuyển Tabs -->
+                <div class="tab-header">
+                    <button class="tab-btn active" data-tab="color-tab">🎨 Manual Painting</button>
+                    <button class="tab-btn" data-tab="scramble-tab">🔀 Scramble</button>
+                </div>
+
+                <!-- TAB 1: CHỌN MÀU TỰ DO -->
+                <div id="color-tab" class="tab-content active">
+                    <div class="color-picker-section">
+                        <label>1. Select paint color:</label>
+                        <div class="palette">
+                            <div class="color-swatch active" data-color="U" style="background: #ffffff;"></div>
+                            <div class="color-swatch" data-color="R" style="background: #ff3333;"></div>
+                            <div class="color-swatch" data-color="F" style="background: #00cc00;"></div>
+                            <div class="color-swatch" data-color="D" style="background: #ffcc00;"></div>
+                            <div class="color-swatch" data-color="L" style="background: #ff6600;"></div>
+                            <div class="color-swatch" data-color="B" style="background: #0066ff;"></div>
+                        </div>
+                        
+                        <label>2. Paint on the 2D map:</label>
+                        <!-- Khung chứa 2D Map (Sinh ra bằng JS) -->
+                        <div id="facelet-map" class="facelet-map"></div>
+                        
+                        <div class="button-group" style="margin-top: 15px;">
+                            <button id="reset-map-btn" class="btn btn-random">🧹 Clear All</button>
+                            <button id="apply-color-btn" class="btn btn-scramble">✅ Apply to 3D</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 2: SCRAMBLE -->
+                <div id="scramble-tab" class="tab-content">
+                    <div class="input-group">
+                        <label>🔧 Enter scramble sequence:</label>
+                        <input type="text" id="scramble-input" placeholder="Ex: R U2 F' L B D R' U" >
+                        <div class="button-group">
+                            <button id="random-btn" class="btn btn-random">🎲 Random</button>
+                            <button id="perform-scramble-btn" class="btn btn-scramble">🔄 Scramble 3D</button>
+                        </div>
+                    </div>
+                </div>
+
+
+                <button id="solve-btn" class="btn btn-solve btn-large">⚡ SOLVE NOW</button>
+
+                <div id="result-panel" class="result-panel">
+                    <div class="result-header">
+                        <span>📋 SOLUTION</span>
+                        <button id="copy-btn" class="btn-small">📋 Copy</button>
+                    </div>
+                    <div id="solution-moves" class="solution-moves"></div>
+                    <div class="solution-stats">
+                        <span id="move-count">0</span> moves 
+                        (Phase 1: <span id="phase1-count">0</span> | Phase 2: <span id="phase2-count">0</span>)
+                        <span id="solve-time">0</span> ms
+                    </div>
+                    <div class="animation-control">
+                        <button id="play-animation" class="btn-small">▶️ Play Solution</button>
+                        <button id="reset-cube" class="btn-small">🔄 Reset</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Footer -->
+        <footer>
+            <p>⚡ Kociemba 2-phase algorithm | Solves in 20-24 moves | < 200ms</p>
+        </footer>
+    </div>
+
+    <script type="module" src="main.js?v=8"></script>
+</body>
+</html>
